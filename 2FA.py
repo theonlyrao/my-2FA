@@ -1,4 +1,5 @@
 import click
+import shutil
 import sys
 import crypt
 import os
@@ -22,7 +23,7 @@ def create_shadow_entry(username, password, salt, token):
     return line
 
 
-# Login
+# Create user
 def update_etc_shadow(username, password, salt, token):
     line = create_shadow_entry(username, password, salt, token)
     file = open("/etc/shadow", "a+")
@@ -106,7 +107,6 @@ def perform_authentication(username, password, current_token, next_token):
     if found_user:
         with open('/etc/shadow', 'w') as f:
             f.writelines(contents)
-        click.echo("SUCCESS: Login Successful")
         return
     else:
         click.echo("FAILURE: user %s does not exist" % username, err=True)
@@ -133,6 +133,7 @@ def login_user(username, password, current_token, next_token):
         sys.exit()
 
     perform_authentication(username, password, current_token, next_token)
+    click.echo("SUCCESS: Login Successful")
 
 
 # Update password
@@ -198,6 +199,49 @@ def update_password(username, old_password, new_password, new_salt, current_toke
     perform_password_update(username, old_password, new_password, new_salt, current_token, next_token)
 
 
+# Delete user
+
+def delete_user_from_file(username, file):
+    # https://stackoverflow.com/a/4710090
+    with open(file, 'r') as f:
+        contents = f.readlines()
+    with open(file, 'w') as f:
+        for line in contents:
+            temp = line.split(':')
+            if temp[0] != username:
+                f.write(line)
+
+
+@click.command()
+@click.option(
+    '--username',
+    prompt="Please enter your username",
+)
+@click.option(
+    '--password',
+    prompt="Please enter your password")
+@click.option(
+    '--current_token',
+    prompt="Please enter your current token")
+def delete_user(username, password, current_token):
+    if not user_exists(username):
+        click.echo("FAILURE: user %s does not exist" % username, err=True)
+        sys.exit()
+
+    perform_authentication(username, password, current_token, current_token)
+
+    # delete from shadow
+    delete_user_from_file(username, '/etc/shadow')
+
+    # delete home dir
+    shutil.rmtree("/home/%s" % username)
+
+    # delete from passwd
+    delete_user_from_file(username, '/etc/passwd')
+
+    click.echo("SUCCESS: user %s Deleted" % username)
+
+
 @click.command()
 @click.option(
     '--action',
@@ -215,8 +259,10 @@ def main(action):
             login_user()
         if int(action) == 3:
             update_password()
+        if int(action) == 4:
+            delete_user()
         else:
-            click.echo("Not implemented.", err=True)
+            click.echo("Selection not implemented. Please enter 1, 2, 3, or 4.", err=True)
     except Exception:
         traceback.print_exc()
 
