@@ -15,10 +15,12 @@ def user_exists(username):
                 exists = True
     return exists
 
+
 def create_shadow_entry(username, password, salt, token):
     hashed = crypt.crypt(password + token, '$6$' + salt)
     line = username + ':' + hashed + ":17710:0:99999:7:::"
     return line
+
 
 # Login
 def update_etc_shadow(username, password, salt, token):
@@ -79,13 +81,13 @@ def create_user(username, password, salt, initial_token):
 # Login
 def perform_authentication(username, password, current_token, next_token):
     found_user = False
-    salt = ""
     line_num = 0
-    old = []
-    with open('/etc/shadow', 'r') as f: # https://stackoverflow.com/questions/4719438/editing-specific-line-in-text-file-in-python
-        old = f.readlines()  # Pull the file contents to a list
+    contents = []
+    with open('/etc/shadow',
+              'r') as f:  # https://stackoverflow.com/questions/4719438/editing-specific-line-in-text-file-in-python
+        contents = f.readlines()  # Pull the file contents to a list
         f.seek(0)  # Jump to start, so we overwrite instead of appending
-        for line in old:
+        for line in contents:
             temp = line.split(':')
             if temp[0] == username:  # checking whether entered username exist or not
                 salt_and_pass = (temp[1].split('$'))  # retrieving salt against the user
@@ -94,7 +96,7 @@ def perform_authentication(username, password, current_token, next_token):
                                      '$6$' + salt)  # calculating hash via salt and password entered by user
                 if result == temp[1]:  # comparing generated salt with existing salt entery
                     new_shadow_entry = create_shadow_entry(username, password, salt, next_token)
-                    old[line_num] = new_shadow_entry + '\n'
+                    contents[line_num] = new_shadow_entry + '\n'
                     found_user = True
                 else:
                     click.echo("FAILURE: either passwd or token incorrect", err=True)
@@ -103,7 +105,7 @@ def perform_authentication(username, password, current_token, next_token):
 
     if found_user:
         with open('/etc/shadow', 'w') as f:
-            f.writelines(old)
+            f.writelines(contents)
         click.echo("SUCCESS: Login Successful")
         return
     else:
@@ -133,6 +135,69 @@ def login_user(username, password, current_token, next_token):
     perform_authentication(username, password, current_token, next_token)
 
 
+# Update password
+def perform_password_update(username, old_password, new_password, new_salt, current_token, next_token):
+    found_user = False
+    line_num = 0
+    contents = []
+    with open('/etc/shadow',
+              'r') as f:  # https://stackoverflow.com/questions/4719438/editing-specific-line-in-text-file-in-python
+        contents = f.readlines()  # Pull the file contents to a list
+        f.seek(0)  # Jump to start, so we overwrite instead of appending
+        for line in contents:
+            temp = line.split(':')
+            if temp[0] == username:  # checking whether entered username exist or not
+                salt_and_pass = (temp[1].split('$'))  # retrieving salt against the user
+                salt = salt_and_pass[2]
+                result = crypt.crypt(old_password + current_token,
+                                     '$6$' + salt)  # calculating hash via salt and password entered by user
+                if result == temp[1]:  # comparing generated salt with existing salt entery
+                    new_shadow_entry = create_shadow_entry(username, new_password, new_salt, next_token)
+                    contents[line_num] = new_shadow_entry + '\n'
+                    found_user = True
+                else:
+                    click.echo("FAILURE: either passwd or token incorrect", err=True)
+                    sys.exit()
+            line_num = line_num + 1
+
+    if found_user:
+        with open('/etc/shadow', 'w') as f:
+            f.writelines(contents)
+        click.echo("SUCCESS: user %s updated" % username)
+        return
+    else:
+        click.echo("FAILURE: user %s does not exist" % username, err=True)
+        sys.exit()
+
+
+@click.command()
+@click.option(
+    '--username',
+    prompt="Please enter your username",
+)
+@click.option(
+    '--old_password',
+    prompt="Please enter your current password")
+@click.option(
+    '--new_password',
+    prompt="Please enter your new password")
+@click.option(
+    '--new_salt',
+    prompt="Please enter your new salt")
+@click.option(
+    '--current_token',
+    prompt="Please enter your current token")
+@click.option(
+    '--next_token',
+    prompt="Please enter the next token")
+def update_password(username, old_password, new_password, new_salt, current_token, next_token):
+    if not user_exists(username):
+        click.echo("FAILURE: user %s does not exist" % username, err=True)
+        sys.exit()
+
+    perform_password_update(username, old_password, new_password, new_salt, current_token, next_token)
+
+
 @click.command()
 @click.option(
     '--action',
@@ -148,6 +213,8 @@ def main(action):
             create_user()
         if int(action) == 2:
             login_user()
+        if int(action) == 3:
+            update_password()
         else:
             click.echo("Not implemented.", err=True)
     except Exception:
