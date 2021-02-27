@@ -1,5 +1,11 @@
 import click
 
+
+# Login
+def login():
+    pass
+
+
 @click.command()
 @click.option(
     '--action',
@@ -8,9 +14,17 @@ import click
            "3 - update password, "
            "4 - delete user account"
 )
-
 def main(action):
-    click.echo('Hello %s!' % action)
+    # noinspection PyBroadException
+    try:
+        click.echo('Hello %s!' % action)
+        if int(action) == 1:
+            login()
+        else:
+            click.echo("Not implemented.", err=True)
+    except Exception:
+        click.echo("Got an exception: %s" % Exception, err=True)
+
 
 if __name__ == '__main__':
     main()
